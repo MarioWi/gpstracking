@@ -5,28 +5,44 @@
 // blog: http://blog.h4des.org
 // 
 // Licensed under the GNU Public License, version 2.
+//
+// modified for PDO by Mario Wicke
+//
+// converted for use wis PDO by MarioWi
+// 
 
 // include connection data for mysql db
-require_once("../config/config.php");
+require_once('../inc/def/def.php');
 
-$mysql_connection = mysql_connect($mysql_server, $mysql_username, 
-						$mysql_password);
-if(!$mysql_connection) {
-	echo "error mysql_connection";
-	exit(1);				
+// load additional classes
+//function __autoload($class){
+//	require '../inc/class/'.$class.'.class.php';
+//}
+
+//$db = new Db($options, $attributes);
+
+$db = new PDO(SERVER, USER, PW);
+foreach ($attributes as $key => $value) {
+	$db -> setAttribute($value[0], $value[1]);
 }
+$db->exec('USE '.$database);
+
 
 // check if mode is set
 // if not show the device selection
 if(!isset($_GET['mode'])) {
-	// use mysql database
-	if(!mysql_select_db($mysql_database, $mysql_connection)) {
-		echo "error mysql_select_db";
-		exit(1);
-	}
 
 	// get all tracking devices
-	$result = mysql_query("select distinct name from $mysql_table;");
+	$sql = "SELECT DISTINCT
+				name
+			FROM 
+				$mysql_table";
+	$query = $db->prepare($sql);
+	$parameters = array(
+					':mysql_table' => $mysql_table
+					);
+	$query -> execute($parameters);
+	//$query = $db -> selectOne($sql);
 
 	echo '<table border="0">';
 	echo '<tr>';
@@ -35,16 +51,18 @@ if(!isset($_GET['mode'])) {
 	echo '</td>';
 	echo '</tr>';
 	// create list of tracking devices
-	while($row = mysql_fetch_array($result)) {
-		echo '<tr>';
-		echo '<td>';
-		echo '<a href="get.php?mode=timeselect&trackingdevice=' . htmlentities($row["name"], ENT_QUOTES) . '">';
-		echo htmlentities($row["name"], ENT_QUOTES);
-		echo '</a>';
-		echo '</td>';
-		echo '</tr>';
+	if($query->errorCode() == 0) {
+		while(($row = $query->fetch(FETCH)) != false) {
+			echo '<tr>';
+			echo '<td>';
+			echo '<a href="get.php?mode=timeselect&trackingdevice=' . htmlentities($row["name"], ENT_QUOTES) . '">';
+			echo htmlentities($row["name"], ENT_QUOTES);
+			echo '</a>';
+			echo '</td>';
+			echo '</tr>';
+		}
+		echo '</table>';
 	}
-	echo '</table>';
 
 }
 else {
@@ -58,25 +76,43 @@ else {
 				exit(1);
 			}
 
-			// use mysql database
-			if(!mysql_select_db($mysql_database, $mysql_connection)) {
-				echo "error mysql_select_db";
-				exit(1);
-			}
-
 			// get first entry
-			$result = mysql_query("select * from $mysql_table where name = \""
-				. mysql_real_escape_string($_GET["trackingdevice"]) 
-				. "\" order by utctime asc limit 1");
-			$row = mysql_fetch_array($result);
-			$firstentry = $row["utctime"];
+			$sql = "SELECT 
+						*
+					FROM 
+						$mysql_table 
+					WHERE 
+						name = :trackingdevice 
+					ORDER BY 
+						utctime 
+					ASC LIMIT
+						1";			
+			$query = $db->prepare($sql);
+			$parameters = array(
+								':trackingdevice' => $_GET["trackingdevice"]
+								);
+			$query -> execute($parameters);
+			$result = $query->fetch(FETCH);
+			$firstentry = $result['utctime'];
 
 			// get last entry
-			$result = mysql_query("select * from $mysql_table where name = \"" 
-				. mysql_real_escape_string($_GET["trackingdevice"]) 
-				. "\" order by utctime desc limit 1");
-			$row = mysql_fetch_array($result);
-			$lastentry = $row["utctime"];
+			$sql = "SELECT 
+						*
+					FROM 
+						$mysql_table 
+					WHERE 
+						name = :trackingdevice 
+					ORDER BY 
+						utctime 
+					DESC LIMIT
+						1";			
+			$query = $db->prepare($sql);
+			$parameters = array(
+								':trackingdevice' => $_GET["trackingdevice"]
+								);
+			$query -> execute($parameters);
+			$result = $query->fetch(FETCH);
+			$lastentry = $result["utctime"];
 
 			// create time array of first and last entry
 			$firstentryarray = getdate($firstentry);
@@ -147,28 +183,37 @@ else {
 				exit(1);
 			}
 
-			// use mysql database
-			if(!mysql_select_db($mysql_database, $mysql_connection)) {
-				echo "error mysql_select_db";
-				exit(1);
-			}
-
 			$starttime = doubleval($_GET['starttime']);
 			$endtime = doubleval($_GET['endtime']);
 
 			echo '<a href="get.php">back</a><br />';
-			echo '<a href="show_map.php?mode=livetracking&trackingdevice='
-				. htmlentities($_GET["trackingdevice"], ENT_QUOTES) . '
-				" target="_blank">live tracking of "'
-				. htmlentities($_GET["trackingdevice"], ENT_QUOTES) 
-				. '"</a><br />';
-			echo '<hr />';
+			echo '<a href="./show_map.php?mode=livetracking&trackingdevice='
+			. htmlentities($_GET["trackingdevice"], ENT_QUOTES) . '
+			" target="_blank">live tracking of "'
+			. htmlentities($_GET["trackingdevice"], ENT_QUOTES) 
+			. '"</a><br />';
 
-			$result = mysql_query("select * from $mysql_table where "
-				. " utctime <= $endtime and utctime >= $starttime " 
-				. "and name = \"" 
-				. mysql_real_escape_string($_GET["trackingdevice"]) 
-				. "\" order by utctime asc");
+			$sql = "SELECT 
+						* 
+					FROM 
+						$mysql_table 
+					WHERE 
+						utctime <= :endtime 
+					AND 
+						utctime >= :starttime 
+					AND 
+						name = :trackingdevice 
+					ORDER BY 
+						utctime
+					ASC";
+			$query = $db->prepare($sql);
+			$parameters = array(
+								'endtime'         => $endtime,
+								':starttime'      => $starttime,
+								':trackingdevice' => $_GET["trackingdevice"]
+								);
+			$query -> execute($parameters);
+			//$result = $query->fetch(FETCH);
 
 			$lasttime = 0.0;
 			$tracks = array();
@@ -176,7 +221,7 @@ else {
 
 			// extract all tracks from gps data
 			$first_entry = True;
-			while($row = mysql_fetch_array($result)) {
+			while($row = $query->fetch(FETCH)) {
 				// start new track when position has not changed for 30 minutes
 				if(($row["utctime"]-$lasttime) >= 1800) {
 
@@ -212,13 +257,13 @@ else {
 
 			echo '<td width="250">';
 			echo "<b>";
-			echo "starttime";
+			echo "starttime (UTC)";
 			echo "</b>";
 			echo "</td>";
 
 			echo '<td width="250">';
 			echo "<b>";
-			echo "endtime";
+			echo "endtime (UTC)";
 			echo "</b>";
 			echo "</td>";
 
@@ -299,20 +344,29 @@ else {
 				exit(1);
 			}
 
-			// use mysql database
-			if(!mysql_select_db($mysql_database, $mysql_connection)) {
-				echo "error mysql_select_db";
-				exit(1);
-			}
-
 			$starttime = doubleval($_GET['starttime']);
 			$endtime = doubleval($_GET['endtime']);
 
-			$result = mysql_query("select * from $mysql_table where "
-				. "utctime <= $endtime and utctime >= $starttime "
-				. "and name = \"" 
-				. mysql_real_escape_string($_GET["trackingdevice"]) 
-				. "\" order by utctime asc");
+			$sql = "SELECT 
+						* 
+					FROM 
+						$mysql_table 
+					WHERE 
+						utctime <= :endtime 
+					AND 
+						utctime >= :starttime 
+					AND 
+						name = :trackingdevice 
+					ORDER BY 
+						utctime
+					ASC";
+			$query = $db->prepare($sql);
+			$parameters = array(
+								'endtime'         => $endtime,
+								':starttime'      => $starttime,
+								':trackingdevice' => $_GET["trackingdevice"]
+								);
+			$query -> execute($parameters);
 
 			// set header for download
 			header("Cache-Control: public");
@@ -336,7 +390,7 @@ else {
 			echo '</metadata>';
 			echo "\n";
 
-			while($row = mysql_fetch_array($result)) {
+			while($row = $query->fetch(FETCH)) {
 				// start new track when position has not changed for 30 minutes
 				if(($row["utctime"]-$lasttime) >= 1800) {
 

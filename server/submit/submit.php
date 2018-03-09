@@ -5,48 +5,76 @@
 // blog: http://blog.h4des.org
 // 
 // Licensed under the GNU Public License, version 2.
+//
+// converted for use wis PDO by MarioWi
+// 
 
 function add_data_to_db($utctime, $latitude, $longitude, $altitude, $speed) {
 
-	// include connection data for mysql db
-	require("../config/config.php");
+	// include connection data for mysql db and some other definitons
+	require_once('../inc/def/def.php');
 
-	$mysql_connection = mysql_connect($mysql_server, $mysql_username, 
-		$mysql_password);
+	// load additional classes
+	//function __autoload($class){
+	//	require '../inc/class/'.$class.'.class.php';
+	//}
 
-	$mysql_insert_query = "INSERT INTO $mysql_table (name, utctime, "
-		. "latitude, longitude, altitude, speed) VALUES (\"" 
-		. mysql_real_escape_string($_SERVER['PHP_AUTH_USER']) 
-		. "\", $utctime, $latitude, $longitude, $altitude, $speed);";
-	$mysql_select_query = "SELECT * FROM $mysql_table WHERE name=\"" 
-		. mysql_real_escape_string($_SERVER['PHP_AUTH_USER']) 
-		. "\" AND utctime=$utctime";
+	// create db-object (connection to db)
+	//$db = new Db($options, $attributes);
+	$db = new PDO(SERVER, USER, PW);
+	foreach ($attributes as $key => $value) {
+		$db -> setAttribute($value[0], $value[1]);
+	}
 
-	if($mysql_connection) {
+	$mysql_insert_query = " INSERT INTO $mysql_table (name, utctime, 
+							latitude, longitude, altitude, speed)
+							VALUES 
+							(:USER, :utctime, :latitude, :longitude, :altitude, 
+							:speed);";
+	$mysql_select_query = "SELECT * FROM $mysql_table WHERE name= 
+		 :USER 
+		 AND
+		 utctime=:utctime";
+
+	if($db) {
 		// use mysql database
-		if(!mysql_select_db($mysql_database, $mysql_connection)) {
+		try{
+			$db->exec('USE '.$database);
+		}
+		catch(Exception $e){
 			// return 4 for "error mysql_select_db"
 			return 4;
 		}
-
 		// get data to check duplicate entries
-		$result = mysql_query($mysql_select_query);
-		$row = mysql_fetch_row($result);
-		if(count($row) !== 1) {
+		$query = $db->prepare($mysql_select_query);
+		$parameters = array(
+							':USER'        => $_SERVER['PHP_AUTH_USER'],
+							':utctime'     => $utctime
+							);
+		$query -> execute($parameters);
+		$row = $query->rowCount();
+		//if($row !== 1) {
+		if($row > 1) {
 			// return 5 for "duplicate entries"
 			return 5;
 		}
 
 		// insert data
-		if(!mysql_query($mysql_insert_query)) {
+		try{
+			$query = $db->prepare($mysql_insert_query);
+			$parameters = array(
+								':USER'        => $_SERVER['PHP_AUTH_USER'],
+								':utctime'     => $utctime,
+								':latitude'    => $latitude,
+								':longitude'   => $longitude,
+								':altitude'    => $altitude,
+								':speed'       => $speed
+								);
+			$query -> execute($parameters);
+		} 
+		catch(Exception $e) {
 			// return 3 for "error mysql_query"
 			return 3;
-		}
-
-		// close connection
-		if(!mysql_close($mysql_connection)) {
-			// return 2 for "error mysql_close"
-			return 2;
 		}
 
 		// print ok for the client
@@ -134,6 +162,8 @@ if(isset($_SERVER['PHP_AUTH_USER'])
 			echo "error mysql_connect";
 			break;
 		case 2:
+			// not needed anymore 
+			// connection will be closed automaticly by PDO
 			echo "error mysql_close";
 			break;
 		case 3:

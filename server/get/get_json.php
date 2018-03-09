@@ -5,9 +5,25 @@
 // blog: http://blog.h4des.org
 // 
 // Licensed under the GNU Public License, version 2.
+//
+// converted for use wis PDO by MarioWi
+// 
 
 // include connection data for mysql db
-require_once("../config/config.php");
+require_once('../inc/def/def.php');
+
+// load additional classes
+//function __autoload($class){
+//	require '../inc/class/'.$class.'.class.php';
+//}
+
+//$db = new Db($options, $attributes);
+
+$db = new PDO(SERVER, USER, PW);
+foreach ($attributes as $key => $value) {
+	$db -> setAttribute($value[0], $value[1]);
+}
+$db->exec('USE '.$database);
 
 // check if mode is set
 if(!isset($_GET['mode'])) {
@@ -15,12 +31,6 @@ if(!isset($_GET['mode'])) {
 	exit(1);
 }
 
-$mysql_connection = mysql_connect($mysql_server, $mysql_username,
-						$mysql_password);
-if(!$mysql_connection) {
-	echo "error mysql_connection";
-	exit(1);				
-}
 
 switch($_GET['mode']) {
 	// in this case only a point newer than a given time is outputed
@@ -32,18 +42,25 @@ switch($_GET['mode']) {
 
 			$lastTime = doubleval($_GET['lasttime']);
 
-			// use mysql database
-			if(!mysql_select_db($mysql_database, $mysql_connection)) {
-				echo "error mysql_select_db";
-				exit(1);
-			}
-
 			// get newest point (if exists)
-			$result = mysql_query("select * from $mysql_table where " 
-				. "utctime > $lastTime and name = \"" 
-				. mysql_real_escape_string($_GET["trackingdevice"]) 
-				. "\" order by utctime desc limit 1");
-			$row = mysql_fetch_array($result);
+			$sql = "SELECT 
+						* 
+					FROM 
+						$mysql_table 
+					WHERE 
+						utctime > :lastTime 
+					AND 
+						name = :trackingdevice 
+					ORDER BY 
+						utctime
+					DESC LIMIT 1";
+			$query = $db->prepare($sql);
+			$parameters = array(
+								'lastTime'         => $lastTime,
+								':trackingdevice' => $_GET["trackingdevice"]
+								);
+			$query -> execute($parameters);
+			$row = $query->fetch(FETCH);
 
 			// check if no newer entry exists
 			if($row == null) {
@@ -83,22 +100,31 @@ switch($_GET['mode']) {
 			$starttime = doubleval($_GET['starttime']);
 			$endtime = doubleval($_GET['endtime']);
 
-			// use mysql database
-			if(!mysql_select_db($mysql_database, $mysql_connection)) {
-				echo "error mysql_select_db";
-				exit(1);
-			}
-
 			// get all entries within the given time frame
-			$result = mysql_query("select * from $mysql_table where " 
-				. "utctime <= $endtime and utctime >= $starttime " 
-				. "and name = \"" 
-				. mysql_real_escape_string($_GET["trackingdevice"]) 
-				. "\" order by utctime asc");
+			$sql = "SELECT 
+						* 
+					FROM 
+						$mysql_table 
+					WHERE 
+						utctime <= :endtime 
+					AND 
+						utctime >= :starttime 
+					AND 
+						name = :trackingdevice 
+					ORDER BY 
+						utctime
+					ASC";
+			$query = $db->prepare($sql);
+			$parameters = array(
+								'endtime'         => $endtime,
+								':starttime'      => $starttime,
+								':trackingdevice' => $_GET["trackingdevice"]
+								);
+			$query -> execute($parameters);
 
 			// generate output array that contains all gps entries
 			$output = array();
-			while($row = mysql_fetch_array($result)) {
+			while($row = $query->fetch(FETCH)) {
 				// get only values that should be outputed
 				$entry = array("name" => $row["name"],
 					"utctime" => $row["utctime"],
